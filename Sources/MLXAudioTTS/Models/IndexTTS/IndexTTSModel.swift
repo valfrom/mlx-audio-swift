@@ -333,7 +333,7 @@ public final class IndexTTSModel: SpeechGenerationModel, @unchecked Sendable {
 
     public var sampleRate: Int { config.sampleRate }
     public var defaultGenerationParameters: GenerateParameters {
-        GenerateParameters(maxTokens: min(5000, config.gpt.maxMelTokens), temperature: 0.8, topP: 1.0, topK: 30)
+        GenerateParameters(maxTokens: min(5000, config.gpt.maxMelTokens), temperature: 0.8, topP: 1.0)
     }
 
     public init(
@@ -495,8 +495,8 @@ public final class IndexTTSModel: SpeechGenerationModel, @unchecked Sendable {
             maxTokens: maxTokens,
             temperature: generationParameters.temperature,
             topP: generationParameters.topP,
-            topK: generationParameters.topK,
-            minP: generationParameters.minP
+            topK: 30,
+            minP: 0
         )
     }
 

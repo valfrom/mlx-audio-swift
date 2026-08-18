@@ -655,10 +655,10 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, @unchecked Send
         VoiceDesignGenerationSettings(
             language: language ?? "auto",
             temperature: generationParameters.temperature,
-            topK: generationParameters.topK,
+            topK: 50,
             topP: generationParameters.topP,
             repetitionPenalty: generationParameters.repetitionPenalty ?? 1.05,
-            minP: generationParameters.minP,
+            minP: 0,
             maxTokens: generationParameters.maxTokens ?? 4096
         )
     }
