@@ -100,7 +100,7 @@ public final class MimiConvTransposed1d: MLXNN.ConvTransposed1d {
             stride: stride,
             padding: padding,
             dilation: dilation,
-            outputPadding: outputPadding,
+            outputPadding: 0,
             groups: gEff
         )
         if let b = bias { y = y + b }

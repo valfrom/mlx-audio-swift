@@ -9,7 +9,7 @@ enum NemotronASRAttentionMask {
         let chunkSize = max(rightContext + 1, 1)
         let leftChunks = leftContext >= 0 ? leftContext / chunkSize : 1_000_000
 
-        let positions = MLX.arange(seqLen, dtype: .float32)
+        let positions = MLXArray.arange(seqLen, dtype: .float32)
         let chunkIndex = floor(positions / Float(chunkSize)).asType(.int32)
         let queryChunks = chunkIndex.expandedDimensions(axis: 1)
         let keyChunks = chunkIndex.expandedDimensions(axis: 0)

@@ -279,10 +279,10 @@ private func mossApplyAudioRoPE(
     let time = q.dim(2)
     let dim = q.dim(3)
     let freqs = exp(
-        MLX.arange(dim / 2, dtype: .float32)
+        MLXArray.arange(dim / 2, dtype: .float32)
             * (MLXArray(-log(maxPeriod) * 2.0 / Float(dim)))
     )
-    let positions = (MLX.arange(time, dtype: .float32) + Float(offset))
+    let positions = (MLXArray.arange(time, dtype: .float32) + Float(offset))
     let phase = positions.reshaped([1, 1, time, 1]) * freqs.reshaped([1, 1, 1, dim / 2])
     let cosPhase = cos(phase)
     let sinPhase = sin(phase)
@@ -479,9 +479,9 @@ private final class MossAudioTransformer: Module {
     func callAsFunction(_ x: MLXArray, inputLengths: MLXArray) -> MLXArray {
         var hidden = x
         if ["sin", "sin_rope"].contains(positionalEmbedding) {
-            let positions = MLX.arange(hidden.dim(1), dtype: hidden.dtype)
+            let positions = MLXArray.arange(hidden.dim(1), dtype: hidden.dtype)
             let half = hidden.dim(2) / 2
-            let scale = pow(MLXArray(maxPeriod), MLX.arange(half, dtype: hidden.dtype) / MLXArray(Float(max(half - 1, 1))))
+            let scale = pow(MLXArray(maxPeriod), MLXArray.arange(half, dtype: hidden.dtype) / MLXArray(Float(max(half - 1, 1))))
             let phase = positions.reshaped([hidden.dim(1), 1]) / scale.reshaped([1, half])
             let emb = MLX.concatenated([cos(phase), sin(phase)], axis: -1)
             hidden = hidden + MLXArray(positionalScale).asType(hidden.dtype) * emb.expandedDimensions(axis: 0)

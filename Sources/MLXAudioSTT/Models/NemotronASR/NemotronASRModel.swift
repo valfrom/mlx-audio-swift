@@ -268,7 +268,7 @@ public final class NemotronASRModel: Module, STTGenerationModel {
         let promptIDs = MLXArray(Array(repeating: Int32(promptIndex), count: batch * time))
             .reshaped([batch, time])
             .expandedDimensions(axis: 2)
-        let promptRange = MLX.arange(numPrompts, dtype: .int32).reshaped([1, 1, numPrompts])
+        let promptRange = MLXArray.arange(numPrompts, dtype: .int32).reshaped([1, 1, numPrompts])
         let oneHot = MLX.where(promptRange .== promptIDs, MLXArray(Float(1)), MLXArray(Float(0))).asType(encoded.dtype)
         let conditioned = MLX.concatenated([encoded, oneHot], axis: 2)
         return promptKernel(conditioned)

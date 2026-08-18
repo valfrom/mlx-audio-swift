@@ -90,7 +90,6 @@ public final class MossTTSModel: Module, SpeechGenerationModel, @unchecked Senda
                 maxTokens: 4_096,
                 temperature: 1.0,
                 topP: 0.95,
-                topK: 50,
                 repetitionPenalty: 1.1
             )
         }
@@ -98,7 +97,6 @@ public final class MossTTSModel: Module, SpeechGenerationModel, @unchecked Senda
             maxTokens: generationConfig.maxNewTokens ?? 4_096,
             temperature: generationConfig.temperature ?? 1.7,
             topP: generationConfig.topP ?? 0.8,
-            topK: generationConfig.topK ?? 25,
             repetitionPenalty: generationConfig.repetitionPenalty ?? 1.0
         )
     }
@@ -748,7 +746,7 @@ public final class MossTTSModel: Module, SpeechGenerationModel, @unchecked Senda
                 maxNewTokens: generationParameters.maxTokens ?? 4_096,
                 audioTemperature: generationParameters.temperature,
                 audioTopP: generationParameters.topP,
-                audioTopK: generationParameters.topK,
+                audioTopK: 50,
                 audioRepetitionPenalty: generationParameters.repetitionPenalty ?? 1.1
             )
         } else {
@@ -760,7 +758,7 @@ public final class MossTTSModel: Module, SpeechGenerationModel, @unchecked Senda
                 textTopK: 50,
                 audioTemperature: generationParameters.temperature,
                 audioTopP: generationParameters.topP,
-                audioTopK: generationParameters.topK,
+                audioTopK: generationConfig.topK ?? 25,
                 audioRepetitionPenalty: generationParameters.repetitionPenalty ?? generationConfig.repetitionPenalty ?? 1.0
             )
         }

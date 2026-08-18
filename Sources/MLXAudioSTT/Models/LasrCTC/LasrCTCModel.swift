@@ -30,7 +30,7 @@ private final class LasrRotaryEmbedding {
     }
 
     func callAsFunction(sequenceLength: Int, dtype: DType = .float32) -> (MLXArray, MLXArray) {
-        let positions = MLX.arange(sequenceLength, dtype: .float32)
+        let positions = MLXArray.arange(sequenceLength, dtype: .float32)
         let dimValues = stride(from: 0, to: headDim, by: 2).map { Float($0) }
         let invFreq = 1.0 / pow(MLXArray(base), MLXArray(dimValues) / Float(headDim))
         let angles = positions.expandedDimensions(axis: 1) * invFreq.expandedDimensions(axis: 0)

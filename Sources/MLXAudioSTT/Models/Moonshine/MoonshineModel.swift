@@ -95,7 +95,7 @@ private final class MoonshineRotaryEmbedding {
     }
 
     func callAsFunction(sequenceLength: Int, dtype: DType) -> (MLXArray, MLXArray) {
-        let positions = MLX.arange(sequenceLength, dtype: .float32)
+        let positions = MLXArray.arange(sequenceLength, dtype: .float32)
         let dimValues = stride(from: 0, to: rotaryDim, by: 2).map(Float.init)
         let invFreq = 1.0 / pow(MLXArray(base), MLXArray(dimValues) / Float(rotaryDim))
         let freqs = positions.expandedDimensions(axis: 1) * invFreq.expandedDimensions(axis: 0)

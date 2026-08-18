@@ -2,7 +2,18 @@
 
 import Foundation
 import HuggingFace
+import MLX
 import MLXAudioCore
+
+extension MLXArray {
+    static func arange(_ stop: Int) -> MLXArray {
+        MLXArray(0..<stop)
+    }
+
+    static func arange(_ stop: Int, dtype: DType) -> MLXArray {
+        arange(stop).asType(dtype)
+    }
+}
 
 public enum STTModelError: Error, LocalizedError, CustomStringConvertible {
     case invalidRepositoryID(String)

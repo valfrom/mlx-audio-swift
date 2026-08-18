@@ -12,9 +12,9 @@ final class MossRotaryEmbedding: @unchecked Sendable {
         precondition(headDim % 2 == 0, "RoPE head dimension must be even")
         let invFreq = 1.0 / pow(
             MLXArray(ropeBase),
-            MLX.arange(0, headDim, step: 2, dtype: .float32) / MLXArray(Float(headDim))
+            MLXArray.arange(0, headDim, step: 2, dtype: .float32) / MLXArray(Float(headDim))
         )
-        let positions = MLX.arange(maxPositionEmbeddings, dtype: .float32)
+        let positions = MLXArray.arange(maxPositionEmbeddings, dtype: .float32)
         let angles = MLX.outer(positions, invFreq)
         self.cosCache = cos(angles)
         self.sinCache = sin(angles)

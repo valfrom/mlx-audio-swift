@@ -3,6 +3,12 @@ import HuggingFace
 import MLX
 import MLXAudioCore
 
+extension MLXArray {
+    static func arange(_ stop: Int) -> MLXArray {
+        MLXArray(0..<stop)
+    }
+}
+
 // MARK: - STSModel Protocol
 
 public protocol STSModel: AnyObject {

@@ -11,9 +11,9 @@ private func echoTtsCallUnary(_ layer: Module, _ x: MLXArray) -> MLXArray {
 }
 
 func echoTtsPrecomputeFreqsCis(dim: Int, end: Int, theta: Float = 10_000) -> EchoTTSRotaryCache {
-    let indices = MLX.arange(0, dim, step: 2, dtype: .float32) / Float(dim)
+    let indices = MLXArray.arange(0, dim, step: 2, dtype: .float32) / Float(dim)
     let freqs = 1 / MLX.pow(MLXArray(theta), indices)
-    let positions = MLX.arange(end, dtype: .float32)
+    let positions = MLXArray.arange(end, dtype: .float32)
     let angles = MLX.outer(positions, freqs)
     return (MLX.cos(angles), MLX.sin(angles))
 }
@@ -33,7 +33,7 @@ func echoTtsTimestepEmbedding(_ timestep: MLXArray, embedSize: Int) -> MLXArray 
     precondition(embedSize % 2 == 0, "embedSize must be even")
     let half = embedSize / 2
     let base = log(MLXArray(10_000, dtype: .float32))
-    let exponent = MLX.arange(half, dtype: .float32) / Float(half)
+    let exponent = MLXArray.arange(half, dtype: .float32) / Float(half)
     let freqs = 1_000 * MLX.exp(-base * exponent)
     let args = timestep.expandedDimensions(axis: -1) * freqs.expandedDimensions(axis: 0)
     return MLX.concatenated([MLX.cos(args), MLX.sin(args)], axis: -1).asType(timestep.dtype)
@@ -46,8 +46,8 @@ private func echoTtsBoolToAdditiveMask(_ mask: MLXArray) -> MLXArray {
 }
 
 private func echoTtsMakeCausalMask(_ length: Int) -> MLXArray {
-    let row = MLX.arange(length).expandedDimensions(axis: 1)
-    let col = MLX.arange(length).expandedDimensions(axis: 0)
+    let row = MLXArray.arange(length).expandedDimensions(axis: 1)
+    let col = MLXArray.arange(length).expandedDimensions(axis: 0)
     return row .>= col
 }
 
@@ -287,7 +287,7 @@ final class EchoJointAttention: Module {
         if let kvCacheLatent, kvCacheLatent.keys.shape[1] > 0 {
             latentKeys = kvCacheLatent.keys
             latentValues = kvCacheLatent.values
-            let positions = MLX.arange(kvCacheLatent.keys.shape[1], dtype: .int32) * speakerPatchSize
+            let positions = MLXArray.arange(kvCacheLatent.keys.shape[1], dtype: .int32) * speakerPatchSize
             latentMask = MLX.broadcast(
                 (positions.expandedDimensions(axis: 0) .< resolvedStartPos),
                 to: [batch, kvCacheLatent.keys.shape[1]]
@@ -699,7 +699,7 @@ public final class EchoDiT: Module {
         }
 
         let latentState = latentNorm(latentEncoder(prefixLatent))
-        let positions = MLX.arange(latentState.shape[1], dtype: .int32) * speakerPatchSize
+        let positions = MLXArray.arange(latentState.shape[1], dtype: .int32) * speakerPatchSize
         let freqs = echoTtsPrecomputeFreqsCis(dim: headDim, end: latentState.shape[1] * speakerPatchSize)
         let latentFreqs = (
             cos: freqs.cos[positions],

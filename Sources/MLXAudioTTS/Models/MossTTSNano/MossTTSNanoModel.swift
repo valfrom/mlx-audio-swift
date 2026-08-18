@@ -25,7 +25,6 @@ public final class MossTTSNanoModel: Module, SpeechGenerationModel, @unchecked S
             maxTokens: 375,
             temperature: 0.7,
             topP: 0.9,
-            topK: 50,
             repetitionPenalty: 1.1
         )
     }
@@ -499,7 +498,7 @@ public final class MossTTSNanoModel: Module, SpeechGenerationModel, @unchecked S
                 doSample: generationParameters.temperature > 0,
                 audioTemperature: generationParameters.temperature,
                 audioTopP: generationParameters.topP,
-                audioTopK: generationParameters.topK,
+                audioTopK: 50,
                 audioRepetitionPenalty: generationParameters.repetitionPenalty ?? 1.1
             )
             allAudioTokens.append(audioTokens)

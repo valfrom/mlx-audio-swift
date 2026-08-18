@@ -5,6 +5,20 @@ import MLXAudioCore
 @preconcurrency import AVFoundation
 #endif
 
+extension MLXArray {
+    static func arange(_ stop: Int, dtype: DType) -> MLXArray {
+        arange(stop).asType(dtype)
+    }
+
+    static func arange(_ start: Int, _ stop: Int, dtype: DType) -> MLXArray {
+        MLXArray(start..<stop).asType(dtype)
+    }
+
+    static func arange(_ start: Int, _ stop: Int, step: Int, dtype: DType) -> MLXArray {
+        MLXArray(Swift.stride(from: start, to: stop, by: step)).asType(dtype)
+    }
+}
+
 public protocol SpeechGenerationModel: AnyObject {
     var sampleRate: Int { get }
     var defaultGenerationParameters: GenerateParameters { get }

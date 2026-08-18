@@ -43,9 +43,9 @@ final class FishSpeechRotaryEmbedding: @unchecked Sendable {
     init(headDim: Int, ropeBase: Float, maxPositionEmbeddings: Int) {
         let freqs = 1.0 / pow(
             MLXArray(ropeBase),
-            MLX.arange(0, headDim, step: 2, dtype: .float32) / MLXArray(Float(headDim))
+            MLXArray.arange(0, headDim, step: 2, dtype: .float32) / MLXArray(Float(headDim))
         )
-        let positions = MLX.arange(maxPositionEmbeddings, dtype: .float32)
+        let positions = MLXArray.arange(maxPositionEmbeddings, dtype: .float32)
         let angles = MLX.outer(positions, freqs)
         self.cosCache = cos(angles).asType(.bfloat16)
         self.sinCache = sin(angles).asType(.bfloat16)
