@@ -236,7 +236,7 @@ public class FishS1Transformer: Module, UnaryLayer {
         var mask = (row .>= col)
             .expandedDimensions(axis: 0)
             .expandedDimensions(axis: 0)
-        if mask.dtype == .bool {
+        if mask.dtype == DType.bool {
             mask = MLX.where(mask, MLXArray(0.0, dtype: x.dtype), MLXArray(-1e9, dtype: x.dtype))
         }
         var hidden = x
@@ -289,7 +289,7 @@ public final class FishS1WindowLimitedTransformer: FishS1Transformer {
         let seqLen = hidden.shape[1]
         let localFreqs = freqsCis.map { $0[0..<seqLen] }
         var mask = makeWindowLimitedMask(seqLen)
-        if mask.dtype == .bool {
+        if mask.dtype == DType.bool {
             mask = MLX.where(mask, MLXArray(0.0, dtype: hidden.dtype), MLXArray(-1e9, dtype: hidden.dtype))
         }
 
