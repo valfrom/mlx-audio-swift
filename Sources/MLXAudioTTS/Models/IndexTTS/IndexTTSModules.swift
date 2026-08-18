@@ -738,7 +738,7 @@ public final class IndexTTSCore: Module {
         var tokenIDs: [Int] = []
         var latents: [MLXArray] = []
         let sampler = temperature > 0
-            ? TopPSampler(temperature: temperature, topP: topP, topK: topK, minP: minP)
+            ? TopPSampler(temperature: temperature, topP: topP)
             : nil
 
         for position in 0..<maxTokens {
