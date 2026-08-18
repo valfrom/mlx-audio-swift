@@ -1,6 +1,24 @@
 import Foundation
 import MLX
 
+extension MLXArray {
+    static func arange(_ stop: Int) -> MLXArray {
+        MLXArray(0..<stop)
+    }
+
+    static func arange(_ stop: Int, dtype: DType) -> MLXArray {
+        arange(stop).asType(dtype)
+    }
+
+    static func arange(_ start: Int, _ stop: Int, dtype: DType) -> MLXArray {
+        MLXArray(start..<stop).asType(dtype)
+    }
+
+    static func arange(_ start: Int, _ stop: Int, step: Int, dtype: DType) -> MLXArray {
+        MLXArray(Swift.stride(from: start, to: stop, by: step)).asType(dtype)
+    }
+}
+
 public protocol AudioDecoderModel {
     associatedtype DecoderInput
 
