@@ -846,22 +846,22 @@ public final class OmniVoiceModel: Module, SpeechGenerationModel, @unchecked Sen
             throw AudioGenerationError.invalidInput("Invalid repository ID: \(repoID)")
         }
 
-        // Download and parse config
-        let configURL = try await ModelUtils.resolveOrDownloadModel(
+        let modelDirectory = try await ModelUtils.resolveOrDownloadModel(
             repoID: repo,
-            requiredExtension: "json",
-            additionalMatchingPatterns: ["config.json"]
-        ).appendingPathComponent("config.json")
+            requiredExtension: "safetensors",
+            additionalMatchingPatterns: ["*.jinja"],
+            cache: cache
+        )
+        return try await fromModelDirectory(modelDirectory)
+    }
 
-        let configData = try Data(contentsOf: configURL)
+    public static func fromModelDirectory(_ modelDirectory: URL) async throws -> OmniVoiceModel {
+        let configData = try Data(contentsOf: modelDirectory.appendingPathComponent("config.json"))
 
         // Load model weights first to infer actual num_audio_codebooks from checkpoint
-        let weightsURL = try await ModelUtils.resolveOrDownloadModel(
-            repoID: repo,
-            requiredExtension: ".safetensors",
-            additionalMatchingPatterns: ["model.safetensors"]
-        ).appendingPathComponent("model.safetensors")
-        let rawWeights = try MLX.loadArrays(url: weightsURL)
+        let rawWeights = try MLX.loadArrays(
+            url: modelDirectory.appendingPathComponent("model.safetensors")
+        )
 
         // Parse and modify main config to match checkpoint
         var configDict = try JSONSerialization.jsonObject(with: configData) as! [String: Any]
@@ -907,19 +907,11 @@ public final class OmniVoiceModel: Module, SpeechGenerationModel, @unchecked Sen
         eval(model)
 
         // Load text tokenizer
-        model.tokenizer = try await AutoTokenizer.from(modelFolder: {
-            let dir = try await ModelUtils.resolveOrDownloadModel(
-                repoID: repo,
-                requiredExtension: "json",
-                additionalMatchingPatterns: ["tokenizer.json"]
-            )
-            return dir
-        }())
+        model.tokenizer = try await AutoTokenizer.from(modelFolder: modelDirectory)
 
         // Load audio tokenizer
-        model.audioTokenizer = try await OmniVoiceAudioTokenizer.fromPretrained(
-            repoID: repoID,
-            cache: cache
+        model.audioTokenizer = try OmniVoiceAudioTokenizer.fromModelDirectory(
+            modelDirectory.appendingPathComponent("audio_tokenizer")
         )
 
         return model
@@ -1672,21 +1664,21 @@ public final class OmniVoiceAudioTokenizer: Module {
             throw AudioGenerationError.invalidInput("Invalid repository ID: \(repoID)")
         }
 
-        let configURL = try await ModelUtils.resolveOrDownloadModel(
+        let modelDirectory = try await ModelUtils.resolveOrDownloadModel(
             repoID: repo,
-            requiredExtension: "json",
-            additionalMatchingPatterns: ["audio_tokenizer/config.json"]
-        ).appendingPathComponent("audio_tokenizer/config.json")
+            requiredExtension: "safetensors",
+            cache: cache
+        ).appendingPathComponent("audio_tokenizer")
+        return try fromModelDirectory(modelDirectory)
+    }
 
-        let configData = try Data(contentsOf: configURL)
+    public static func fromModelDirectory(_ modelDirectory: URL) throws -> OmniVoiceAudioTokenizer {
+        let configData = try Data(contentsOf: modelDirectory.appendingPathComponent("config.json"))
 
         // Load tokenizer weights first to infer actual n_codebooks
-        let weightsURL = try await ModelUtils.resolveOrDownloadModel(
-            repoID: repo,
-            requiredExtension: ".safetensors",
-            additionalMatchingPatterns: ["audio_tokenizer/model.safetensors"]
-        ).appendingPathComponent("audio_tokenizer/model.safetensors")
-        let rawWeights = try MLX.loadArrays(url: weightsURL)
+        let rawWeights = try MLX.loadArrays(
+            url: modelDirectory.appendingPathComponent("model.safetensors")
+        )
         let inferredNCodebooks = Self.inferNCodebooks(from: rawWeights) ?? 9
 
         var configDict = try JSONSerialization.jsonObject(with: configData) as! [String: Any]
