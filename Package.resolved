@@ -1,5 +1,5 @@
 {
-  "originHash" : "4f148e1f0e3958fd3f86560361e4a93ad32a6877d96593d3a361ee25e86da198",
+  "originHash" : "ef8a4ac5c1c000ab0a8b8ecff8c7bf194f3636de074ffea5ae85daeeab62ec0f",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -22,10 +22,9 @@
     {
       "identity" : "mlx-swift",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/ml-explore/mlx-swift.git",
+      "location" : "https://github.com/valfrom/mlx-swift.git",
       "state" : {
-        "revision" : "dc43e62d7055353c7f99fa071a4e71d29dfddc44",
-        "version" : "0.31.4"
+        "revision" : "1257e7fd89cf4357a4cea7558ffe97c3001f13de"
       }
     },
     {
@@ -33,8 +32,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ml-explore/mlx-swift-lm.git",
       "state" : {
-        "revision" : "bd4b7434e6bdb588c7ef55706ff8904cb7fd4c57",
-        "version" : "3.31.4"
+        "revision" : "7110ed2bb41dfbe8fae59e14d3cab38436f392d4"
       }
     },
     {
@@ -233,15 +231,6 @@
       "state" : {
         "revision" : "89888196dd79c61c50bca9a103d8114f32e1e598",
         "version" : "2.10.1"
-      }
-    },
-    {
-      "identity" : "swift-syntax",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/swiftlang/swift-syntax.git",
-      "state" : {
-        "revision" : "79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1",
-        "version" : "603.0.2"
       }
     },
     {
