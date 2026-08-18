@@ -57,9 +57,9 @@ func fishS1PrecomputeFreqsCis(
 ) -> MLXArray {
     let freqs = 1.0 / MLX.pow(
         MLXArray(base),
-        MLX.arange(0, headDim, step: 2, dtype: .float32) / MLXArray(Float(headDim))
+        MLXArray.arange(0, headDim, step: 2, dtype: .float32) / MLXArray(Float(headDim))
     )
-    let time = MLX.arange(seqLen, dtype: .float32)
+    let time = MLXArray.arange(seqLen, dtype: .float32)
     let angles = MLX.outer(time, freqs)
     return MLX.stacked([MLX.cos(angles), MLX.sin(angles)], axis: -1).asType(dtype)
 }
@@ -231,8 +231,8 @@ public class FishS1Transformer: Module, UnaryLayer {
     public func callAsFunction(_ x: MLXArray) -> MLXArray {
         let seqLen = x.shape[1]
         let localFreqs = freqsCis.map { $0[0..<seqLen, 0...] }
-        let row = MLX.arange(seqLen).expandedDimensions(axis: 1)
-        let col = MLX.arange(seqLen).expandedDimensions(axis: 0)
+        let row = MLXArray.arange(seqLen).expandedDimensions(axis: 1)
+        let col = MLXArray.arange(seqLen).expandedDimensions(axis: 0)
         var mask = (row .>= col)
             .expandedDimensions(axis: 0)
             .expandedDimensions(axis: 0)
@@ -272,8 +272,8 @@ public final class FishS1WindowLimitedTransformer: FishS1Transformer {
     }
 
     func makeWindowLimitedMask(_ length: Int) -> MLXArray {
-        let row = MLX.arange(length).expandedDimensions(axis: 1)
-        let col = MLX.arange(length).expandedDimensions(axis: 0)
+        let row = MLXArray.arange(length).expandedDimensions(axis: 1)
+        let col = MLXArray.arange(length).expandedDimensions(axis: 0)
         let window = windowSize ?? length
         let validRange = MLX.maximum(row - window + 1, 0)
         return ((col .>= validRange) & (col .<= row))

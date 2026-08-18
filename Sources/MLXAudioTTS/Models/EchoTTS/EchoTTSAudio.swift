@@ -130,7 +130,7 @@ func echoTtsGetSpeakerLatentAndMask(
 
     let actualLatentLength = clippedLength / audioDownsampleFactor
     var speakerMask = MLX.broadcast(
-        MLX.arange(speakerLatent.shape[1], dtype: .int32).expandedDimensions(axis: 0),
+        MLXArray.arange(speakerLatent.shape[1], dtype: .int32).expandedDimensions(axis: 0),
         to: [1, speakerLatent.shape[1]]
     ) .< actualLatentLength
 

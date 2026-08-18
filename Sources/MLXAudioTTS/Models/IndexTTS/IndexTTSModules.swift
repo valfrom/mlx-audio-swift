@@ -183,9 +183,9 @@ final class IndexTTSRelPositionalEncoding {
     }
 
     private static func makePE(maxLen: Int, dModel: Int) -> MLXArray {
-        let positions = MLX.arange(0, maxLen, dtype: .float32).expandedDimensions(axis: 1)
+        let positions = MLXArray.arange(0, maxLen, dtype: .float32).expandedDimensions(axis: 1)
         let divTerm = MLX.exp(
-            MLX.arange(0, dModel, step: 2, dtype: .float32)
+            MLXArray.arange(0, dModel, step: 2, dtype: .float32)
                 * Float(-log(10000.0) / Float(dModel))
         )
         let sin = MLX.sin(positions * divTerm)

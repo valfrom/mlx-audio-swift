@@ -14,7 +14,7 @@ final class SenseVoiceSinusoidalPositionEncoder {
 
         let positions = MLXArray((1...timesteps).map(Float.init))
         let logIncrement = Float(log(10000.0) / Double(max(halfDim - 1, 1)))
-        let invTimescales = MLX.exp(MLX.arange(halfDim, dtype: .float32) * MLXArray(-logIncrement))
+        let invTimescales = MLX.exp(MLXArray.arange(halfDim, dtype: .float32) * MLXArray(-logIncrement))
         let scaledTime = positions.expandedDimensions(axis: 1) * invTimescales.expandedDimensions(axis: 0)
 
         var encoding = MLX.concatenated([MLX.sin(scaledTime), MLX.cos(scaledTime)], axis: 1)

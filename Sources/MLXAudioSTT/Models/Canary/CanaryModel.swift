@@ -463,7 +463,7 @@ public final class CanaryModel: Module, STTGenerationModel {
         let encoded = encoder(mel, lengths: lengths)
         eval(encoded.0, encoded.1)
 
-        let positions = MLX.arange(encoded.0.dim(1), dtype: .int32).expandedDimensions(axis: 0)
+        let positions = MLXArray.arange(encoded.0.dim(1), dtype: .int32).expandedDimensions(axis: 0)
         let mask = (positions .< encoded.1.expandedDimensions(axis: 1)).asType(.float32)
         return (encoded.0, encoded.1, mask)
     }
