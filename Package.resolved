@@ -1,5 +1,5 @@
 {
-  "originHash" : "f74f619712a6d8ace8c464df6114a2594c9ccf4bdb6967f3ed8e8dc5bdb3c7ec",
+  "originHash" : "853b6e88843e920b94a536c5a224540eff1fcd5501b8a5e6268a3116d55b9ffb",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -24,7 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/valfrom/mlx-swift.git",
       "state" : {
-        "revision" : "1257e7fd89cf4357a4cea7558ffe97c3001f13de"
+        "branch" : "eval-pause",
+        "revision" : "604166b9d525d332241a995aa3382f8093cfd4a4"
       }
     },
     {
