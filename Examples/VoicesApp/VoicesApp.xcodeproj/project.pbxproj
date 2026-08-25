@@ -236,7 +236,7 @@
 			);
 			mainGroup = GRP001;
 			packageReferences = (
-				C9383F192F4F82E900F82F53 /* XCLocalSwiftPackageReference "../../../mlx-audio-swift" */,
+				C9383F192F4F82E900F82F53 /* XCLocalSwiftPackageReference "../.." */,
 			);
 			productRefGroup = GRP006 /* Products */;
 			projectDirPath = "";
@@ -486,9 +486,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		C9383F192F4F82E900F82F53 /* XCLocalSwiftPackageReference "../../../mlx-audio-swift" */ = {
+		C9383F192F4F82E900F82F53 /* XCLocalSwiftPackageReference "../.." */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = "../../../mlx-audio-swift";
+			relativePath = "../..";
 		};
 /* End XCLocalSwiftPackageReference section */
 

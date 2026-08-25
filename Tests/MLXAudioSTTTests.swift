@@ -1936,6 +1936,17 @@ struct MossTranscribeDiarizeModuleSetupTests {
         #expect(segments[1]["speaker_id"] as? String == "S02")
     }
 
+    @Test func mossParseSegmentsFillsShortSameSpeakerGaps() {
+        let text = "[0][S01]a[1][1.5][S01]b[2][2.2][S02]c[3][3.8][S02]d[4]"
+
+        let segments = MossTranscribeDiarizeModel.parseSegments(text: text, fallbackEnd: 4.0)
+
+        #expect(segments.count == 4)
+        #expect(segments[1]["start"] as? Double == 1.0)
+        #expect(segments[2]["start"] as? Double == 2.2)
+        #expect(segments[3]["start"] as? Double == 3.8)
+    }
+
     @Test func mossParseSegmentsAppliesChunkOffset() {
         let text = "[0.48][S01]hello[1.66]"
 

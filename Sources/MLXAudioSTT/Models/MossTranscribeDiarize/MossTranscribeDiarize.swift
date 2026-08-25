@@ -10,11 +10,12 @@ private let mossAudioPadToken = "<|audio_pad|>"
 private let mossAudioStartToken = "<|audio_start|>"
 private let mossAudioEndToken = "<|audio_end|>"
 private let mossWhisperEncoderStride = 2
+private let mossMaximumSameSpeakerGap = 0.75
 
 public let mossTranscribeDiarizeDefaultRepo = "OpenMOSS-Team/MOSS-Transcribe-Diarize"
 
 private let mossDefaultPrompt = """
-Transcribe the audio into text. Start each segment with the start timestamp and speaker label ([S01], [S02], [S03], ...), write the corresponding spoken content, and end each segment with the ending timestamp to clearly mark the segment range.
+请将音频转写为文本，每一段需以起始时间戳和说话人编号（[S01]、[S02]、[S03]…）开头，正文为对应的语音内容，并在段末标注结束时间戳，以清晰标明该段语音范围。
 """
 
 private struct MossTimestampTagOffsetter {
@@ -939,6 +940,19 @@ extension MossTranscribeDiarizeModel {
         }
 
         if !segments.isEmpty {
+            for index in 1..<segments.count {
+                guard let previousSpeaker = segments[index - 1]["speaker_id"] as? String,
+                      let speaker = segments[index]["speaker_id"] as? String,
+                      previousSpeaker == speaker,
+                      let previousEnd = segments[index - 1]["end"] as? Double,
+                      let start = segments[index]["start"] as? Double,
+                      start > previousEnd,
+                      start - previousEnd <= mossMaximumSameSpeakerGap
+                else {
+                    continue
+                }
+                segments[index]["start"] = previousEnd
+            }
             return segments
         }
         return [["start": offsetSeconds, "end": offsetSeconds + max(fallbackEnd, 0.0), "text": text]]
