@@ -168,6 +168,41 @@ public final class MossTranscribeDiarizeBackbone: Module {
         }
     }
 
+    func getAudioFeaturesSequentially(
+        inputFeatureChunks: [MLXArray],
+        audioFeatureLengths: [Int]
+    ) throws -> [MLXArray] {
+        guard inputFeatureChunks.count == audioFeatureLengths.count else {
+            throw STTError.invalidInput("audio_feature_lengths must contain one length per input feature chunk.")
+        }
+
+        var chunks: [MLXArray] = []
+        chunks.reserveCapacity(inputFeatureChunks.count)
+        for (inputFeatures, tokenLen) in zip(inputFeatureChunks, audioFeatureLengths) {
+            let projected = encodeAudioFeatures(inputFeatures: inputFeatures, tokenLength: tokenLen)
+            eval(projected)
+            chunks.append(projected)
+            Memory.clearCache()
+        }
+        return [MLX.concatenated(chunks, axis: 1)]
+    }
+
+    func encodeAudioChunk(_ audio: MLXArray, tokenLength: Int) -> MLXArray {
+        let inputFeatures = WhisperAudio.encoderFeatures(
+            audio: audio,
+            nMels: config.audioConfig.numMelBins
+        ).asType(whisperEncoder.conv1.weight.dtype)
+        let projected = encodeAudioFeatures(inputFeatures: inputFeatures, tokenLength: tokenLength)
+        eval(projected)
+        return projected
+    }
+
+    private func encodeAudioFeatures(inputFeatures: MLXArray, tokenLength: Int) -> MLXArray {
+        let whisperFeatures = whisperEncoder(inputFeatures)
+        let frameLength = tokenLength * config.audioMergeSize
+        return vqAdaptor(timeMerge(whisperFeatures[0..., 0..<frameLength, 0...]))
+    }
+
     func injectAudioFeatures(
         inputIds: MLXArray,
         inputsEmbeds: MLXArray,
@@ -180,6 +215,18 @@ public final class MossTranscribeDiarizeBackbone: Module {
             audioFeatureLengths: audioFeatureLengths,
             audioChunkMapping: audioChunkMapping
         )
+        return try injectAudioFeatures(
+            inputIds: inputIds,
+            inputsEmbeds: inputsEmbeds,
+            audioFeatures: audioFeatures
+        )
+    }
+
+    func injectAudioFeatures(
+        inputIds: MLXArray,
+        inputsEmbeds: MLXArray,
+        audioFeatures: [MLXArray]
+    ) throws -> MLXArray {
         let audioEmbeds = MLX.concatenated(audioFeatures.map { $0.squeezed(axis: 0) }, axis: 0)
             .asType(inputsEmbeds.dtype)
 
@@ -271,7 +318,7 @@ public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
 
     public var defaultGenerationParameters: STTGenerateParameters {
         STTGenerateParameters(
-            maxTokens: 2048,
+            maxTokens: 32_768,
             temperature: 0.0,
             topP: 1.0,
             topK: 0,
@@ -282,6 +329,10 @@ public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
             repetitionPenalty: 1.0,
             repetitionContextSize: 100
         )
+    }
+
+    public static func recommendedMaxTokens(audioDuration: Double) -> Int {
+        min(32_768, max(4_096, Int(ceil(audioDuration * 18.0)) + 1_024))
     }
 
     public func makeCache() -> [KVCache] {
@@ -405,7 +456,7 @@ public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
 
     public func generate(
         audio: MLXArray,
-        maxTokens: Int = 2048,
+        maxTokens: Int = 32_768,
         temperature: Float = 0.0,
         chunkDuration: Float = 1800.0,
         minChunkDuration: Float = 0.0,
@@ -453,6 +504,11 @@ public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
 }
 
 private extension MossTranscribeDiarizeModel {
+    struct GeneratedTokenIds {
+        let tokens: [Int]
+        let reachedLimit: Bool
+    }
+
     struct PreparedGenerationInputs {
         let promptIds: MLXArray
         let inputEmbeddings: MLXArray
@@ -473,47 +529,22 @@ private extension MossTranscribeDiarizeModel {
         return audio.reshaped(-1).asType(.float32)
     }
 
-    func computeAudioTokenLength(numSamples: Int) -> Int {
-        let stride = WhisperAudioConfig.hopLength * mossWhisperEncoderStride * config.audioMergeSize
-        return (numSamples - 1) / stride + 1
-    }
-
     func preprocessAudio(_ audio: MLXArray) throws -> (
-        inputFeatures: MLXArray,
-        audioLengths: MLXArray,
-        chunkMapping: MLXArray,
+        waveform: MLXArray,
         featureLengths: [Int],
         duration: Double
     ) {
         let wav = try audioToMono(audio)
         let sampleCount = wav.dim(0)
         let chunkSamples = WhisperAudioConfig.chunkLengthSamples
-        var chunks: [MLXArray] = []
-        var featureLengths: [Int] = []
-        var chunkMapping: [Int32] = []
+        let featureLengths = Self.audioFeatureLengths(
+            sampleCount: sampleCount,
+            chunkSamples: chunkSamples,
+            audioMergeSize: config.audioMergeSize
+        )
 
-        var start = 0
-        while start < sampleCount {
-            let end = min(start + chunkSamples, sampleCount)
-            let chunk = wav[start..<end]
-            featureLengths.append(computeAudioTokenLength(numSamples: max(1, end - start)))
-            chunks.append(WhisperAudio.encoderFeatures(audio: chunk, nMels: config.audioConfig.numMelBins))
-            chunkMapping.append(0)
-            start = end
-        }
-
-        if chunks.isEmpty {
-            chunks.append(WhisperAudio.encoderFeatures(audio: wav, nMels: config.audioConfig.numMelBins))
-            featureLengths.append(1)
-            chunkMapping.append(0)
-        }
-
-        let inputFeatures = MLX.concatenated(chunks, axis: 0)
-            .asType(model.whisperEncoder.conv1.weight.dtype)
         return (
-            inputFeatures,
-            MLXArray(featureLengths.map(Int32.init)),
-            MLXArray(chunkMapping),
+            wav,
             featureLengths,
             Double(sampleCount) / Double(sampleRate)
         )
@@ -591,18 +622,30 @@ private extension MossTranscribeDiarizeModel {
     }
 
     func prepareGenerationInputs(audio: MLXArray, prompt: String?) throws -> PreparedGenerationInputs {
-        let (inputFeatures, audioLengths, chunkMapping, featureLengths, duration) = try preprocessAudio(audio)
+        let (waveform, featureLengths, duration) = try preprocessAudio(audio)
+        let chunkSamples = WhisperAudioConfig.chunkLengthSamples
+        var audioFeatures: [MLXArray] = []
+        audioFeatures.reserveCapacity(featureLengths.count)
+        for (index, featureLength) in featureLengths.enumerated() {
+            let start = index * chunkSamples
+            let end = min(start + chunkSamples, waveform.dim(0))
+            let projected = model.encodeAudioChunk(
+                waveform[start..<end],
+                tokenLength: featureLength
+            )
+            audioFeatures.append(projected)
+            Memory.clearCache()
+        }
         let audioTokenCount = featureLengths.reduce(0, +)
         let inputIds = try buildPrompt(audioTokenCount: audioTokenCount, prompt: prompt)
         let embeds = model.languageModel.embedTokens(inputIds)
         let inputsEmbeds = try model.injectAudioFeatures(
             inputIds: inputIds,
             inputsEmbeds: embeds,
-            inputFeatures: inputFeatures,
-            audioFeatureLengths: audioLengths,
-            audioChunkMapping: chunkMapping
+            audioFeatures: audioFeatures
         )
         eval(inputsEmbeds)
+        Memory.clearCache()
         return PreparedGenerationInputs(
             promptIds: inputIds,
             inputEmbeddings: inputsEmbeds,
@@ -644,12 +687,20 @@ private extension MossTranscribeDiarizeModel {
         let prefillStart = Date()
         let prepared = try prepareGenerationInputs(audio: audio, prompt: prompt)
         let prefillTime = Date().timeIntervalSince(prefillStart)
+        let effectiveMaxTokens = try Self.effectiveMaxTokens(
+            promptTokenCount: prepared.promptTokenCount,
+            requestedMaxTokens: min(
+                maxTokens,
+                Self.recommendedMaxTokens(audioDuration: prepared.duration)
+            ),
+            maxPositionEmbeddings: config.textConfig.maxPositionEmbeddings
+        )
         let genStart = Date()
         var offsetter = MossTimestampTagOffsetter(offsetSeconds: offsetSeconds)
-        let generatedTokens = try generateTokenIds(
+        let generation = try generateTokenIds(
             promptIds: prepared.promptIds,
             inputEmbeddings: prepared.inputEmbeddings,
-            maxTokens: maxTokens,
+            maxTokens: effectiveMaxTokens,
             temperature: temperature,
             repetitionPenalty: repetitionPenalty,
             repetitionContextSize: repetitionContextSize,
@@ -663,13 +714,14 @@ private extension MossTranscribeDiarizeModel {
                 onText?(shiftedDelta)
             }
         }
+        try Self.requireCompleteGeneration(reachedLimit: generation.reachedLimit)
         let bufferedText = offsetter.finish()
         if !bufferedText.isEmpty {
             onText?(bufferedText)
         }
         let genTime = Date().timeIntervalSince(genStart)
         let rawText = tokenizer?
-            .decode(tokens: generatedTokens, skipSpecialTokens: true)
+            .decode(tokens: generation.tokens, skipSpecialTokens: true)
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let text = Self.offsetTimestampTags(in: rawText, by: offsetSeconds)
         let totalTime = Date().timeIntervalSince(start)
@@ -681,10 +733,10 @@ private extension MossTranscribeDiarizeModel {
                 offsetSeconds: offsetSeconds
             ),
             promptTokens: prepared.promptTokenCount,
-            generationTokens: generatedTokens.count,
-            totalTokens: prepared.promptTokenCount + generatedTokens.count,
+            generationTokens: generation.tokens.count,
+            totalTokens: prepared.promptTokenCount + generation.tokens.count,
             promptTps: prefillTime > 0 ? Double(prepared.promptTokenCount) / prefillTime : 0,
-            generationTps: genTime > 0 ? Double(generatedTokens.count) / genTime : 0,
+            generationTps: genTime > 0 ? Double(generation.tokens.count) / genTime : 0,
             totalTime: totalTime,
             peakMemoryUsage: Double(Memory.peakMemory) / 1e9
         )
@@ -705,11 +757,11 @@ private extension MossTranscribeDiarizeModel {
         kvGroupSize: Int = 64,
         quantizedKVStart: Int = 0,
         onToken: ((Int) -> Void)? = nil
-    ) throws -> [Int] {
+    ) throws -> GeneratedTokenIds {
         var cache = makeCache()
         // Quantized prefill attention is unfused; its transient scores tensor
         // scales with chunk size, so a smaller chunk bounds the memory spike.
-        let prefillStepSize = kvBits == nil ? 2048 : 512
+        let prefillStepSize = 512
         let totalTokens = promptIds.dim(1)
         var processedTokens = 0
 
@@ -760,7 +812,7 @@ private extension MossTranscribeDiarizeModel {
 
             let token = nextTokenArray.item(Int.self)
             if eos.contains(token) {
-                break
+                return GeneratedTokenIds(tokens: generated, reachedLimit: false)
             }
             generated.append(token)
             onToken?(token)
@@ -768,11 +820,11 @@ private extension MossTranscribeDiarizeModel {
             if repetitionPenalty == 1.0 && generated.count >= 24 {
                 let tail = generated.suffix(24)
                 if Set(tail).count <= 3 {
-                    break
+                    return GeneratedTokenIds(tokens: generated, reachedLimit: false)
                 }
             }
             if tokenIndex == maxTokens - 1 {
-                break
+                return GeneratedTokenIds(tokens: generated, reachedLimit: true)
             }
 
             let nextInput = MLXArray([Int32(token)]).expandedDimensions(axis: 0)
@@ -799,11 +851,47 @@ private extension MossTranscribeDiarizeModel {
                 Memory.clearCache()
             }
         }
-        return generated
+        return GeneratedTokenIds(tokens: generated, reachedLimit: false)
     }
 }
 
 extension MossTranscribeDiarizeModel {
+    static func audioTokenLength(numSamples: Int, audioMergeSize: Int) -> Int {
+        let stride = WhisperAudioConfig.hopLength * mossWhisperEncoderStride * audioMergeSize
+        return (max(1, numSamples) - 1) / stride + 1
+    }
+
+    static func audioFeatureLengths(
+        sampleCount: Int,
+        chunkSamples: Int,
+        audioMergeSize: Int
+    ) -> [Int] {
+        stride(from: 0, to: sampleCount, by: chunkSamples).map { start in
+            audioTokenLength(
+                numSamples: min(chunkSamples, sampleCount - start),
+                audioMergeSize: audioMergeSize
+            )
+        }
+    }
+
+    static func effectiveMaxTokens(
+        promptTokenCount: Int,
+        requestedMaxTokens: Int,
+        maxPositionEmbeddings: Int
+    ) throws -> Int {
+        let remaining = maxPositionEmbeddings - promptTokenCount
+        guard remaining > 0 else {
+            throw STTError.invalidInput("MOSS prompt exceeds the \(maxPositionEmbeddings)-token context limit.")
+        }
+        return min(max(1, requestedMaxTokens), remaining)
+    }
+
+    static func requireCompleteGeneration(reachedLimit: Bool) throws {
+        guard !reachedLimit else {
+            throw STTError.incompleteResult("MOSS reached the generation or context token limit.")
+        }
+    }
+
     func streamingTranscribeWindow(
         audio: MLXArray,
         offsetSeconds: Double,

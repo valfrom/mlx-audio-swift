@@ -2038,6 +2038,98 @@ struct MossTranscribeDiarizeModuleSetupTests {
         #expect(parameters.kvGroupSize == 64)
         #expect(parameters.quantizedKVStart == 0)
     }
+
+    @Test func mossSequentialAudioFeaturesMatchBatch() throws {
+        let audioConfig = WhisperConfig(
+            numMelBins: 4,
+            dModel: 8,
+            encoderLayers: 1,
+            encoderAttentionHeads: 2,
+            encoderFfnDim: 16,
+            maxSourcePositions: 4
+        )
+        let textConfig = Qwen3TextConfig(
+            vocabSize: 100,
+            hiddenSize: 8,
+            intermediateSize: 16,
+            numHiddenLayers: 1,
+            numAttentionHeads: 2,
+            numKeyValueHeads: 1,
+            headDim: 4
+        )
+        let backbone = MossTranscribeDiarizeBackbone(MossTranscribeDiarizeConfig(
+            textConfig: textConfig,
+            audioConfig: audioConfig,
+            audioTokenId: 99,
+            audioMergeSize: 2
+        ))
+        let first = MLXArray.ones([1, 8, 4])
+        let second = MLXArray.zeros([1, 8, 4])
+        let batched = try backbone.getAudioFeatures(
+            inputFeatures: MLX.concatenated([first, second], axis: 0),
+            audioFeatureLengths: MLXArray([Int32(2), Int32(2)]),
+            audioChunkMapping: MLXArray([Int32(0), Int32(0)])
+        )[0]
+        let sequential = try backbone.getAudioFeaturesSequentially(
+            inputFeatureChunks: [first, second],
+            audioFeatureLengths: [2, 2]
+        )[0]
+        eval(batched, sequential)
+
+        #expect(batched.shape == sequential.shape)
+        #expect(MLX.abs(batched - sequential).max().item(Float.self) < 1e-5)
+    }
+
+    @Test func mossRecommendedMaxTokensUsesDurationFormula() {
+        #expect(MossTranscribeDiarizeModel.recommendedMaxTokens(audioDuration: 60) == 4_096)
+        #expect(MossTranscribeDiarizeModel.recommendedMaxTokens(audioDuration: 922.042) == 17_621)
+        #expect(MossTranscribeDiarizeModel.recommendedMaxTokens(audioDuration: 3_600) == 32_768)
+    }
+
+    @Test func mossAudioFeatureLengthsIncludePartialFinalWindow() {
+        let lengths = MossTranscribeDiarizeModel.audioFeatureLengths(
+            sampleCount: 496_000,
+            chunkSamples: 480_000,
+            audioMergeSize: 4
+        )
+
+        #expect(lengths == [375, 13])
+        #expect(lengths.reduce(0, +) == 388)
+    }
+
+    @Test func mossEffectiveMaxTokensHonorsContextLimit() throws {
+        let value = try MossTranscribeDiarizeModel.effectiveMaxTokens(
+            promptTokenCount: 120_000,
+            requestedMaxTokens: 32_768,
+            maxPositionEmbeddings: 131_072
+        )
+
+        #expect(value == 11_072)
+    }
+
+    @Test func mossRejectsExhaustedContext() {
+        do {
+            _ = try MossTranscribeDiarizeModel.effectiveMaxTokens(
+                promptTokenCount: 131_072,
+                requestedMaxTokens: 4_096,
+                maxPositionEmbeddings: 131_072
+            )
+            Issue.record("Expected exhausted MOSS context to fail")
+        } catch STTError.invalidInput {
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test func mossRejectsIncompleteGeneration() {
+        do {
+            try MossTranscribeDiarizeModel.requireCompleteGeneration(reachedLimit: true)
+            Issue.record("Expected capped MOSS generation to fail")
+        } catch STTError.incompleteResult {
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
 }
 
 struct CohereTranscribeModuleSetupTests {

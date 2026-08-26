@@ -57,6 +57,7 @@ public struct STTGenerationInfo: Sendable {
 public enum STTError: Error, LocalizedError {
     case modelNotInitialized(String)
     case generationFailed(String)
+    case incompleteResult(String)
     case invalidInput(String)
     case audioProcessingFailed(String)
 
@@ -66,6 +67,8 @@ public enum STTError: Error, LocalizedError {
             return "Model not initialized: \(message)"
         case .generationFailed(let message):
             return "Generation failed: \(message)"
+        case .incompleteResult(let message):
+            return "Incomplete result: \(message)"
         case .invalidInput(let message):
             return "Invalid input: \(message)"
         case .audioProcessingFailed(let message):
