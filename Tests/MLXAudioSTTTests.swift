@@ -1962,6 +1962,17 @@ struct MossTranscribeDiarizeModuleSetupTests {
         #expect(segments[0]["speaker_id"] as? String == "S01")
     }
 
+    @Test func mossParseSegmentsClipsToAudioDuration() {
+        let text = "[8][S01]inside[12][14][S02]outside[16]"
+
+        let segments = MossTranscribeDiarizeModel.parseSegments(text: text, fallbackEnd: 10.0)
+
+        #expect(segments.count == 1)
+        #expect(segments[0]["start"] as? Double == 8.0)
+        #expect(segments[0]["end"] as? Double == 10.0)
+        #expect(segments[0]["speaker_id"] as? String == "S01")
+    }
+
     @Test func mossOffsetTimestampTags() {
         let text = "[0.48][S01]hello[1.66][2.00][S02]world[3.50]"
 

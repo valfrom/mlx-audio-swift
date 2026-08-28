@@ -1005,12 +1005,18 @@ extension MossTranscribeDiarizeModel {
             range: NSRange(location: 0, length: nsText.length)
         )
         var segments: [[String: Any]] = []
+        let upperBound = offsetSeconds + max(fallbackEnd, 0.0)
         for match in matches {
             guard match.numberOfRanges == 5,
-                  let start = Self.timestampValue(nsText.substring(with: match.range(at: 1))),
-                  let end = Self.timestampValue(nsText.substring(with: match.range(at: 4))),
-                  end >= start
+                  let parsedStart = Self.timestampValue(nsText.substring(with: match.range(at: 1))),
+                  let parsedEnd = Self.timestampValue(nsText.substring(with: match.range(at: 4))),
+                  parsedEnd >= parsedStart
             else {
+                continue
+            }
+            let start = min(upperBound, max(offsetSeconds, parsedStart + offsetSeconds))
+            let end = min(upperBound, max(start, parsedEnd + offsetSeconds))
+            guard end > start else {
                 continue
             }
             let speaker = nsText.substring(with: match.range(at: 2))
@@ -1020,8 +1026,8 @@ extension MossTranscribeDiarizeModel {
                 continue
             }
             segments.append([
-                "start": start + offsetSeconds,
-                "end": end + offsetSeconds,
+                "start": start,
+                "end": end,
                 "text": "[\(speaker)] \(segmentText)",
                 "speaker_id": speaker,
             ])
