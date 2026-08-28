@@ -341,6 +341,17 @@ public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
         (0..<config.textConfig.numHiddenLayers).map { _ in KVCacheSimple() }
     }
 
+    private func makeCache(scheme: String?) -> [KVCache] {
+        (0..<config.textConfig.numHiddenLayers).map { _ in
+            switch scheme {
+            case "kvquant4":
+                MossKVQuantCache()
+            default:
+                KVCacheSimple()
+            }
+        }
+    }
+
     public func callAsFunction(
         inputIds: MLXArray,
         inputEmbeddings: MLXArray? = nil,
@@ -760,7 +771,8 @@ private extension MossTranscribeDiarizeModel {
         quantizedKVStart: Int = 0,
         onToken: ((Int) -> Void)? = nil
     ) throws -> GeneratedTokenIds {
-        var cache = makeCache()
+        let cacheScheme = ProcessInfo.processInfo.environment["MOSS_KV_CACHE_SCHEME"]?.lowercased()
+        var cache = makeCache(scheme: cacheScheme)
         // Quantized prefill attention is unfused; its transient scores tensor
         // scales with chunk size, so a smaller chunk bounds the memory spike.
         let prefillStepSize = 512

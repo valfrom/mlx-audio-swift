@@ -790,6 +790,18 @@ class Qwen3ASRTextAttention: Module {
         keys = keys.transposed(0, 2, 1, 3)
         values = values.transposed(0, 2, 1, 3)
 
+        if let cache = cache as? MossKVQuantCache {
+            queries = rope(queries, offset: cache.offset)
+            let output = cache.attention(
+                queries: queries,
+                keys: keys,
+                values: values,
+                scale: scale,
+                mask: mask
+            ).transposed(0, 2, 1, 3).reshaped(B, L, -1)
+            return oProj(output)
+        }
+
         // Apply RoPE using the pre-update cache offset, matching the previous
         // manual cache.update + scaledDotProductAttention sequence.
         if let cache = cache {
