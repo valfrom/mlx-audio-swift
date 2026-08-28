@@ -2091,10 +2091,22 @@ struct MossTranscribeDiarizeModuleSetupTests {
         #expect(MLX.abs(batched - sequential).max().item(Float.self) < 1e-5)
     }
 
-    @Test func mossRecommendedMaxTokensUsesDurationFormula() {
-        #expect(MossTranscribeDiarizeModel.recommendedMaxTokens(audioDuration: 60) == 4_096)
-        #expect(MossTranscribeDiarizeModel.recommendedMaxTokens(audioDuration: 922.042) == 17_621)
+    @Test func mossRecommendedMaxTokensUsesModelMaximum() {
+        #expect(MossTranscribeDiarizeModel.recommendedMaxTokens(audioDuration: 60) == 32_768)
+        #expect(MossTranscribeDiarizeModel.recommendedMaxTokens(audioDuration: 922.042) == 32_768)
         #expect(MossTranscribeDiarizeModel.recommendedMaxTokens(audioDuration: 3_600) == 32_768)
+    }
+
+    @Test func mossEffectiveMaxTokensHonorsSixGigabyteKV8Limit() throws {
+        let value = try MossTranscribeDiarizeModel.effectiveMaxTokens(
+            promptTokenCount: 12_144,
+            requestedMaxTokens: 32_768,
+            maxPositionEmbeddings: 131_072,
+            maximumTotalTokens:
+                MossTranscribeDiarizeModel.maximumTotalTokensForSixGigabyteKV8Limit
+        )
+
+        #expect(value == 30_864)
     }
 
     @Test func mossAudioFeatureLengthsIncludePartialFinalWindow() {

@@ -287,6 +287,8 @@ public final class MossTranscribeDiarizeBackbone: Module {
 }
 
 public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
+    public static let maximumTotalTokensForSixGigabyteKV8Limit = 43_008
+
     public let config: MossTranscribeDiarizeConfig
     public let vocabSize: Int
     public let sampleRate: Int
@@ -331,8 +333,8 @@ public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
         )
     }
 
-    public static func recommendedMaxTokens(audioDuration: Double) -> Int {
-        min(32_768, max(4_096, Int(ceil(audioDuration * 18.0)) + 1_024))
+    public static func recommendedMaxTokens(audioDuration _: Double) -> Int {
+        32_768
     }
 
     public func makeCache() -> [KVCache] {
@@ -689,11 +691,11 @@ private extension MossTranscribeDiarizeModel {
         let prefillTime = Date().timeIntervalSince(prefillStart)
         let effectiveMaxTokens = try Self.effectiveMaxTokens(
             promptTokenCount: prepared.promptTokenCount,
-            requestedMaxTokens: min(
-                maxTokens,
-                Self.recommendedMaxTokens(audioDuration: prepared.duration)
-            ),
-            maxPositionEmbeddings: config.textConfig.maxPositionEmbeddings
+            requestedMaxTokens: maxTokens,
+            maxPositionEmbeddings: config.textConfig.maxPositionEmbeddings,
+            maximumTotalTokens: kvBits == 8
+                ? Self.maximumTotalTokensForSixGigabyteKV8Limit
+                : nil
         )
         let genStart = Date()
         var offsetter = MossTimestampTagOffsetter(offsetSeconds: offsetSeconds)
@@ -877,11 +879,16 @@ extension MossTranscribeDiarizeModel {
     static func effectiveMaxTokens(
         promptTokenCount: Int,
         requestedMaxTokens: Int,
-        maxPositionEmbeddings: Int
+        maxPositionEmbeddings: Int,
+        maximumTotalTokens: Int? = nil
     ) throws -> Int {
-        let remaining = maxPositionEmbeddings - promptTokenCount
+        let maximum = min(
+            maxPositionEmbeddings,
+            maximumTotalTokens ?? maxPositionEmbeddings
+        )
+        let remaining = maximum - promptTokenCount
         guard remaining > 0 else {
-            throw STTError.invalidInput("MOSS prompt exceeds the \(maxPositionEmbeddings)-token context limit.")
+            throw STTError.invalidInput("MOSS prompt exceeds the \(maximum)-token context limit.")
         }
         return min(max(1, requestedMaxTokens), remaining)
     }
