@@ -345,9 +345,18 @@ public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
         (0..<config.textConfig.numHiddenLayers).map { _ in
             switch scheme {
             case "kvquant4":
-                MossKVQuantCache()
+                MossKVQuantCache.make()
             default:
                 KVCacheSimple()
+            }
+        }
+    }
+
+    private func maybeConvertMossCache(cache: inout [KVCache], scheme: String?) {
+        guard scheme == "kvquant4" else { return }
+        for index in cache.indices {
+            if let simple = cache[index] as? KVCacheSimple, simple.offset > 0 {
+                cache[index] = MossKVQuantCache.converting(simple)
             }
         }
     }
@@ -790,12 +799,16 @@ private extension MossTranscribeDiarizeModel {
             eval(logits)
             // Quantize retained context as prefill progresses (as mlx-lm does):
             // a long prompt would otherwise peak at full-precision KV.
-            maybeQuantizeKVCache(
-                cache: &cache,
-                kvBits: kvBits,
-                kvGroupSize: kvGroupSize,
-                quantizedKVStart: quantizedKVStart
-            )
+            if cacheScheme == "kvquant4" {
+                maybeConvertMossCache(cache: &cache, scheme: cacheScheme)
+            } else {
+                maybeQuantizeKVCache(
+                    cache: &cache,
+                    kvBits: kvBits,
+                    kvGroupSize: kvGroupSize,
+                    quantizedKVStart: quantizedKVStart
+                )
+            }
             Memory.clearCache()
             processedTokens += n
         }
@@ -811,12 +824,16 @@ private extension MossTranscribeDiarizeModel {
         asyncEval(nextTokenArray)
 
         // Covers prompts short enough that the chunk loop never ran.
-        maybeQuantizeKVCache(
-            cache: &cache,
-            kvBits: kvBits,
-            kvGroupSize: kvGroupSize,
-            quantizedKVStart: quantizedKVStart
-        )
+        if cacheScheme == "kvquant4" {
+            maybeConvertMossCache(cache: &cache, scheme: cacheScheme)
+        } else {
+            maybeQuantizeKVCache(
+                cache: &cache,
+                kvBits: kvBits,
+                kvGroupSize: kvGroupSize,
+                quantizedKVStart: quantizedKVStart
+            )
+        }
 
         var generated: [Int] = []
         let eos = eosTokenIds()

@@ -792,6 +792,7 @@ class Qwen3ASRTextAttention: Module {
 
         if let cache = cache as? MossKVQuantCache {
             queries = rope(queries, offset: cache.offset)
+            keys = rope(keys, offset: cache.offset)
             let output = cache.attention(
                 queries: queries,
                 keys: keys,
