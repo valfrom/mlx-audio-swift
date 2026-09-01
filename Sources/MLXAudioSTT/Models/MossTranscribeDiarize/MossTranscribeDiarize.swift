@@ -286,6 +286,11 @@ public final class MossTranscribeDiarizeBackbone: Module {
     }
 }
 
+public enum MossKVCacheScheme: Sendable, Equatable {
+    case modelPrecision
+    case kvQuant4
+}
+
 public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
     public static let maximumTotalTokensForSixGigabyteKV8Limit = 43_008
 
@@ -300,6 +305,9 @@ public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
     public var audioTokensPerSecond: Float = 12.5
     public var timeMarkerEverySeconds: Int = 5
     public var enableTimeMarker = true
+    public var kvCacheScheme: MossKVCacheScheme =
+        ProcessInfo.processInfo.environment["MOSS_KV_CACHE_SCHEME"]?.lowercased() == "kvquant4"
+        ? .kvQuant4 : .modelPrecision
     private var digitTokenIds: [Character: Int] = [:]
 
     public init(_ config: MossTranscribeDiarizeConfig) {
@@ -341,19 +349,19 @@ public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
         (0..<config.textConfig.numHiddenLayers).map { _ in KVCacheSimple() }
     }
 
-    private func makeCache(scheme: String?) -> [KVCache] {
+    private func makeCache(scheme: MossKVCacheScheme) -> [KVCache] {
         (0..<config.textConfig.numHiddenLayers).map { _ in
             switch scheme {
-            case "kvquant4":
+            case .kvQuant4:
                 MossKVQuantCache.make()
-            default:
+            case .modelPrecision:
                 KVCacheSimple()
             }
         }
     }
 
-    private func maybeConvertMossCache(cache: inout [KVCache], scheme: String?) {
-        guard scheme == "kvquant4" else { return }
+    private func maybeConvertMossCache(cache: inout [KVCache], scheme: MossKVCacheScheme) {
+        guard scheme == .kvQuant4 else { return }
         for index in cache.indices {
             if let simple = cache[index] as? KVCacheSimple, simple.offset > 0 {
                 cache[index] = MossKVQuantCache.converting(simple)
@@ -780,7 +788,7 @@ private extension MossTranscribeDiarizeModel {
         quantizedKVStart: Int = 0,
         onToken: ((Int) -> Void)? = nil
     ) throws -> GeneratedTokenIds {
-        let cacheScheme = ProcessInfo.processInfo.environment["MOSS_KV_CACHE_SCHEME"]?.lowercased()
+        let cacheScheme = kvCacheScheme
         var cache = makeCache(scheme: cacheScheme)
         // Quantized prefill attention is unfused; its transient scores tensor
         // scales with chunk size, so a smaller chunk bounds the memory spike.
@@ -799,7 +807,7 @@ private extension MossTranscribeDiarizeModel {
             eval(logits)
             // Quantize retained context as prefill progresses (as mlx-lm does):
             // a long prompt would otherwise peak at full-precision KV.
-            if cacheScheme == "kvquant4" {
+            if cacheScheme == .kvQuant4 {
                 maybeConvertMossCache(cache: &cache, scheme: cacheScheme)
             } else {
                 maybeQuantizeKVCache(
@@ -824,7 +832,7 @@ private extension MossTranscribeDiarizeModel {
         asyncEval(nextTokenArray)
 
         // Covers prompts short enough that the chunk loop never ran.
-        if cacheScheme == "kvquant4" {
+        if cacheScheme == .kvQuant4 {
             maybeConvertMossCache(cache: &cache, scheme: cacheScheme)
         } else {
             maybeQuantizeKVCache(

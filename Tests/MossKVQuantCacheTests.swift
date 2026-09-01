@@ -15,6 +15,13 @@ import Testing
 @testable import MLXAudioSTT
 
 @Suite struct MossKVQuantCacheTests {
+    @Test func cacheSchemeSelection() {
+        var scheme = MossKVCacheScheme.modelPrecision
+        scheme = .kvQuant4
+
+        #expect(scheme == .kvQuant4)
+    }
+
     @Test func packedStorage() {
         guard MTLCreateSystemDefaultDevice() != nil else { return }
         MLXRandom.seed(7)
