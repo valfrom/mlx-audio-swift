@@ -18,6 +18,31 @@ private let mossDefaultPrompt = """
 请将音频转写为文本，每一段需以起始时间戳和说话人编号（[S01]、[S02]、[S03]…）开头，正文为对应的语音内容，并在段末标注结束时间戳，以清晰标明该段语音范围。
 """
 
+struct MossStreamingTextDecoder {
+    private let decode: ([Int]) -> String
+    private var pendingTokens: [Int] = []
+    private var offsetter: MossTimestampTagOffsetter
+
+    init(offsetSeconds: Double, decode: @escaping ([Int]) -> String) {
+        self.decode = decode
+        offsetter = MossTimestampTagOffsetter(offsetSeconds: offsetSeconds)
+    }
+
+    mutating func consume(_ token: Int) -> String {
+        pendingTokens.append(token)
+        let text = decode(pendingTokens)
+        guard text.unicodeScalars.last?.value != 0xFFFD else { return "" }
+        pendingTokens.removeAll(keepingCapacity: true)
+        return offsetter.consume(text)
+    }
+
+    mutating func finish() -> String {
+        let text = pendingTokens.isEmpty ? "" : decode(pendingTokens)
+        pendingTokens.removeAll(keepingCapacity: true)
+        return offsetter.consume(text) + offsetter.finish()
+    }
+}
+
 private struct MossTimestampTagOffsetter {
     let offsetSeconds: Double
     private var bufferedTag = ""
@@ -726,7 +751,9 @@ private extension MossTranscribeDiarizeModel {
                 : nil
         )
         let genStart = Date()
-        var offsetter = MossTimestampTagOffsetter(offsetSeconds: offsetSeconds)
+        var decoder = MossStreamingTextDecoder(offsetSeconds: offsetSeconds) {
+            self.tokenizer?.decode(tokens: $0, skipSpecialTokens: true) ?? ""
+        }
         let generation = try generateTokenIds(
             promptIds: prepared.promptIds,
             inputEmbeddings: prepared.inputEmbeddings,
@@ -738,14 +765,13 @@ private extension MossTranscribeDiarizeModel {
             kvGroupSize: kvGroupSize,
             quantizedKVStart: quantizedKVStart
         ) { token in
-            let rawDelta = self.tokenizer?.decode(tokens: [token], skipSpecialTokens: true) ?? ""
-            let shiftedDelta = offsetter.consume(rawDelta)
+            let shiftedDelta = decoder.consume(token)
             if !shiftedDelta.isEmpty {
                 onText?(shiftedDelta)
             }
         }
         try Self.requireCompleteGeneration(reachedLimit: generation.reachedLimit)
-        let bufferedText = offsetter.finish()
+        let bufferedText = decoder.finish()
         if !bufferedText.isEmpty {
             onText?(bufferedText)
         }
