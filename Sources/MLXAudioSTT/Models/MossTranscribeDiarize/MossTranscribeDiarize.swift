@@ -17,6 +17,31 @@ private let mossDefaultPrompt = """
 Transcribe the audio into text. Start each segment with the start timestamp and speaker label ([S01], [S02], [S03], ...), write the corresponding spoken content, and end each segment with the ending timestamp to clearly mark the segment range.
 """
 
+struct MossStreamingTextDecoder {
+    private let decode: ([Int]) -> String
+    private var pendingTokens: [Int] = []
+    private var offsetter: MossTimestampTagOffsetter
+
+    init(offsetSeconds: Double, decode: @escaping ([Int]) -> String) {
+        self.decode = decode
+        offsetter = MossTimestampTagOffsetter(offsetSeconds: offsetSeconds)
+    }
+
+    mutating func consume(_ token: Int) -> String {
+        pendingTokens.append(token)
+        let text = decode(pendingTokens)
+        guard text.unicodeScalars.last?.value != 0xFFFD else { return "" }
+        pendingTokens.removeAll(keepingCapacity: true)
+        return offsetter.consume(text)
+    }
+
+    mutating func finish() -> String {
+        let text = pendingTokens.isEmpty ? "" : decode(pendingTokens)
+        pendingTokens.removeAll(keepingCapacity: true)
+        return offsetter.consume(text) + offsetter.finish()
+    }
+}
+
 private struct MossTimestampTagOffsetter {
     let offsetSeconds: Double
     private var bufferedTag = ""
@@ -644,7 +669,9 @@ private extension MossTranscribeDiarizeModel {
         let prepared = try prepareGenerationInputs(audio: audio, prompt: prompt)
         let prefillTime = Date().timeIntervalSince(prefillStart)
         let genStart = Date()
-        var offsetter = MossTimestampTagOffsetter(offsetSeconds: offsetSeconds)
+        var decoder = MossStreamingTextDecoder(offsetSeconds: offsetSeconds) {
+            self.tokenizer?.decode(tokens: $0, skipSpecialTokens: true) ?? ""
+        }
         let generatedTokens = try generateTokenIds(
             promptIds: prepared.promptIds,
             inputEmbeddings: prepared.inputEmbeddings,
@@ -656,13 +683,12 @@ private extension MossTranscribeDiarizeModel {
             kvGroupSize: kvGroupSize,
             quantizedKVStart: quantizedKVStart
         ) { token in
-            let rawDelta = self.tokenizer?.decode(tokens: [token], skipSpecialTokens: true) ?? ""
-            let shiftedDelta = offsetter.consume(rawDelta)
+            let shiftedDelta = decoder.consume(token)
             if !shiftedDelta.isEmpty {
                 onText?(shiftedDelta)
             }
         }
-        let bufferedText = offsetter.finish()
+        let bufferedText = decoder.finish()
         if !bufferedText.isEmpty {
             onText?(bufferedText)
         }
