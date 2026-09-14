@@ -754,6 +754,7 @@ private extension MossTranscribeDiarizeModel {
         var decoder = MossStreamingTextDecoder(offsetSeconds: offsetSeconds) {
             self.tokenizer?.decode(tokens: $0, skipSpecialTokens: true) ?? ""
         }
+        var emptyTail = MossEmptyTailStopper(end: offsetSeconds + prepared.duration)
         let generation = try generateTokenIds(
             promptIds: prepared.promptIds,
             inputEmbeddings: prepared.inputEmbeddings,
@@ -769,6 +770,7 @@ private extension MossTranscribeDiarizeModel {
             if !shiftedDelta.isEmpty {
                 onText?(shiftedDelta)
             }
+            return emptyTail.consume(shiftedDelta)
         }
         try Self.requireCompleteGeneration(reachedLimit: generation.reachedLimit)
         let bufferedText = decoder.finish()
@@ -812,7 +814,7 @@ private extension MossTranscribeDiarizeModel {
         kvBits: Int? = nil,
         kvGroupSize: Int = 64,
         quantizedKVStart: Int = 0,
-        onToken: ((Int) -> Void)? = nil
+        onToken: ((Int) -> Bool)? = nil
     ) throws -> GeneratedTokenIds {
         let cacheScheme = kvCacheScheme
         var cache = makeCache(scheme: cacheScheme)
@@ -880,7 +882,9 @@ private extension MossTranscribeDiarizeModel {
                 return GeneratedTokenIds(tokens: generated, reachedLimit: false)
             }
             generated.append(token)
-            onToken?(token)
+            if onToken?(token) == true {
+                return GeneratedTokenIds(tokens: generated, reachedLimit: false)
+            }
 
             if repetitionPenalty == 1.0 && generated.count >= 24 {
                 let tail = generated.suffix(24)
