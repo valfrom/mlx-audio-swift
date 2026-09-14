@@ -314,6 +314,7 @@ public final class MossTranscribeDiarizeBackbone: Module {
 public enum MossKVCacheScheme: Sendable, Equatable {
     case modelPrecision
     case kvQuant4
+    case kvQuant8
 }
 
 public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
@@ -330,9 +331,13 @@ public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
     public var audioTokensPerSecond: Float = 12.5
     public var timeMarkerEverySeconds: Int = 5
     public var enableTimeMarker = true
-    public var kvCacheScheme: MossKVCacheScheme =
-        ProcessInfo.processInfo.environment["MOSS_KV_CACHE_SCHEME"]?.lowercased() == "kvquant4"
-        ? .kvQuant4 : .modelPrecision
+    public var kvCacheScheme: MossKVCacheScheme = {
+        switch ProcessInfo.processInfo.environment["MOSS_KV_CACHE_SCHEME"]?.lowercased() {
+        case "kvquant4": .kvQuant4
+        case "kvquant8": .kvQuant8
+        default: .modelPrecision
+        }
+    }()
     private var digitTokenIds: [Character: Int] = [:]
 
     public init(_ config: MossTranscribeDiarizeConfig) {
@@ -377,7 +382,7 @@ public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
     private func makeCache(scheme: MossKVCacheScheme) -> [KVCache] {
         (0..<config.textConfig.numHiddenLayers).map { _ in
             switch scheme {
-            case .kvQuant4:
+            case .kvQuant4, .kvQuant8:
                 MossKVQuantCache.make()
             case .modelPrecision:
                 KVCacheSimple()
@@ -386,10 +391,18 @@ public final class MossTranscribeDiarizeModel: Module, STTGenerationModel {
     }
 
     private func maybeConvertMossCache(cache: inout [KVCache], scheme: MossKVCacheScheme) {
-        guard scheme == .kvQuant4 else { return }
+        let valueBits: Int
+        switch scheme {
+        case .modelPrecision:
+            return
+        case .kvQuant4:
+            valueBits = 4
+        case .kvQuant8:
+            valueBits = 8
+        }
         for index in cache.indices {
             if let simple = cache[index] as? KVCacheSimple, simple.offset > 0 {
-                cache[index] = MossKVQuantCache.converting(simple)
+                cache[index] = MossKVQuantCache.converting(simple, valueBits: valueBits)
             }
         }
     }
@@ -835,7 +848,7 @@ private extension MossTranscribeDiarizeModel {
             eval(logits)
             // Quantize retained context as prefill progresses (as mlx-lm does):
             // a long prompt would otherwise peak at full-precision KV.
-            if cacheScheme == .kvQuant4 {
+            if cacheScheme != .modelPrecision {
                 maybeConvertMossCache(cache: &cache, scheme: cacheScheme)
             } else {
                 maybeQuantizeKVCache(
@@ -860,7 +873,7 @@ private extension MossTranscribeDiarizeModel {
         asyncEval(nextTokenArray)
 
         // Covers prompts short enough that the chunk loop never ran.
-        if cacheScheme == .kvQuant4 {
+        if cacheScheme != .modelPrecision {
             maybeConvertMossCache(cache: &cache, scheme: cacheScheme)
         } else {
             maybeQuantizeKVCache(

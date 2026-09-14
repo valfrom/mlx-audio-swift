@@ -11,10 +11,10 @@ import MLXFast
 import MLXLMCommon
 
 final class MossKVQuantCache: KVCache {
-    static let keyBits = 8
-    static let valueBits = 4
     static let groupSize = 64
 
+    let keyBits: Int
+    let valueBits: Int
     private let step = 256
     private var capacity = 0
     private var keys: (MLXArray, MLXArray, MLXArray?)?
@@ -22,12 +22,21 @@ final class MossKVQuantCache: KVCache {
     private(set) var offset = 0
     var maxSize: Int? { nil }
 
+    init(keyBits: Int = 8, valueBits: Int = 4) {
+        self.keyBits = keyBits
+        self.valueBits = valueBits
+    }
+
     static func make() -> KVCacheSimple {
         KVCacheSimple()
     }
 
-    static func converting(_ cache: KVCacheSimple) -> MossKVQuantCache {
-        let converted = MossKVQuantCache()
+    static func converting(
+        _ cache: KVCacheSimple,
+        keyBits: Int = 8,
+        valueBits: Int = 4
+    ) -> MossKVQuantCache {
+        let converted = MossKVQuantCache(keyBits: keyBits, valueBits: valueBits)
         let state = cache.state
         if state.count == 2, cache.offset > 0 {
             _ = converted.append(
@@ -74,7 +83,7 @@ final class MossKVQuantCache: KVCache {
     }
 
     func copy() -> any KVCache {
-        let copied = MossKVQuantCache()
+        let copied = MossKVQuantCache(keyBits: keyBits, valueBits: valueBits)
         if !state.isEmpty {
             copied.state = state.map { $0[.ellipsis] }
         }
@@ -131,7 +140,7 @@ final class MossKVQuantCache: KVCache {
             biases: quantizedKeys.2,
             transpose: true,
             groupSize: Self.groupSize,
-            bits: Self.keyBits
+            bits: keyBits
         )
         scores = apply(mask: mask, to: scores)
         var output = quantizedMM(
@@ -141,7 +150,7 @@ final class MossKVQuantCache: KVCache {
             biases: quantizedValues.2,
             transpose: false,
             groupSize: Self.groupSize,
-            bits: Self.valueBits
+            bits: valueBits
         )
         if repeats > 1 {
             output = output.reshaped(batch, queryHeads, queryLength, dimension)
@@ -168,12 +177,12 @@ final class MossKVQuantCache: KVCache {
         let quantizedKeys = quantized(
             newKeys,
             groupSize: Self.groupSize,
-            bits: Self.keyBits
+            bits: keyBits
         )
         let quantizedValues = quantized(
             newValues,
             groupSize: Self.groupSize,
-            bits: Self.valueBits
+            bits: valueBits
         )
         let range = previous..<(previous + count)
         assign(&keys!, quantizedKeys, range: range)
@@ -198,7 +207,7 @@ final class MossKVQuantCache: KVCache {
             count: added,
             dimension: dimension,
             dtype: dtype,
-            bits: Self.keyBits
+            bits: keyBits
         )
         values = grow(
             values,
@@ -207,7 +216,7 @@ final class MossKVQuantCache: KVCache {
             count: added,
             dimension: dimension,
             dtype: dtype,
-            bits: Self.valueBits
+            bits: valueBits
         )
         capacity += added
     }

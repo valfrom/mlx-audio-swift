@@ -20,6 +20,28 @@ import Testing
         scheme = .kvQuant4
 
         #expect(scheme == .kvQuant4)
+        scheme = .kvQuant8
+        #expect(scheme == .kvQuant8)
+    }
+
+    @Test func eightBitPackedStorage() {
+        guard MTLCreateSystemDefaultDevice() != nil else { return }
+        MLXRandom.seed(9)
+        let length = 128
+        let dimension = 128
+        let keys = MLXRandom.normal([1, 2, length, dimension]).asType(.float16)
+        let values = MLXRandom.normal([1, 2, length, dimension]).asType(.float16)
+        let simple = MossKVQuantCache.make()
+        _ = simple.update(keys: keys, values: values)
+        let cache = MossKVQuantCache.converting(simple, valueBits: 8)
+        eval(cache.state)
+        #expect(cache.keyBits == 8)
+        #expect(cache.valueBits == 8)
+        #expect(cache.state[0].shape == [1, 2, 256, dimension / 4])
+        #expect(cache.state[3].shape == [1, 2, 256, dimension / 4])
+        let copied = cache.copy() as! MossKVQuantCache
+        #expect(copied.keyBits == 8)
+        #expect(copied.valueBits == 8)
     }
 
     @Test func packedStorage() {
@@ -66,6 +88,34 @@ import Testing
         )
         eval(expected, actual)
         #expect(MLX.abs(expected - actual).max().item(Float.self) < 0.3)
+    }
+
+    @Test func eightBitQuantizedAttentionConsumesPackedCache() {
+        guard MTLCreateSystemDefaultDevice() != nil else { return }
+        MLXRandom.seed(13)
+        let length = 12
+        let dimension = 128
+        let scale = pow(Float(dimension), -0.5)
+        let queries = MLXRandom.normal([1, 4, length, dimension]).asType(.float16)
+        let keys = MLXRandom.normal([1, 2, length, dimension]).asType(.float16)
+        let values = MLXRandom.normal([1, 2, length, dimension]).asType(.float16)
+        let expected = MLXFast.scaledDotProductAttention(
+            queries: queries,
+            keys: MLX.repeated(keys, count: 2, axis: 1),
+            values: MLX.repeated(values, count: 2, axis: 1),
+            scale: scale,
+            mask: .causal
+        )
+        let cache = MossKVQuantCache(keyBits: 8, valueBits: 8)
+        let actual = cache.attention(
+            queries: queries,
+            keys: keys,
+            values: values,
+            scale: scale,
+            mask: .causal
+        )
+        eval(expected, actual)
+        #expect(MLX.abs(expected - actual).max().item(Float.self) < 0.1)
     }
 
     @Test func incrementalDecodeMatchesFullAttention() {
